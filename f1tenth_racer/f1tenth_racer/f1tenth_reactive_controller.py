@@ -46,6 +46,9 @@ class F1TenthReactiveController(Node):
 
         self.last_steering_angle = 0.0
         self.steering_smoothing   = 0.65  
+        
+        self.lap_times        = []
+        self.current_speed    = 0.0
 
         qos_sensor = QoSProfile(
             reliability=ReliabilityPolicy.BEST_EFFORT,
@@ -70,8 +73,8 @@ class F1TenthReactiveController(Node):
         )
 
         self.get_logger().info(
-            '\n🏎️   F1Tenth Reactive Controller Optimizado iniciado — '
-            f'{MAX_LAPS} vueltas objetivo\n'
+            '\n🏎️   F1Tenth Reactive Controller iniciado — '
+            f'{MAX_LAPS} vueltas\n'
         )
 
     def _target_speed(self) -> float:
@@ -212,13 +215,14 @@ class F1TenthReactiveController(Node):
 
             lap_time = now - self.lap_start_time
             self.last_lap_time_s  = lap_time
+            self.lap_times.append(lap_time)
             self.lap_count       += 1
             self.last_lap_trigger = now
             self.lap_start_time   = now
             self.max_dist_from_origin = 0.0   
 
             self.get_logger().info(
-                f'\n🏁  ¡VUELTA {self.lap_count}/{MAX_LAPS} completada!'
+                f'\n\n🏁  ¡VUELTA {self.lap_count}/{MAX_LAPS} completada!'
                 f'\nTiempo de Vuelta: {lap_time:.3f}s'
                 f'\nSiguiente Velocidad Base: {self._target_speed():.2f} m/s\n'
             )
@@ -226,6 +230,13 @@ class F1TenthReactiveController(Node):
             if self.lap_count >= MAX_LAPS:
                 self.race_finished = True
                 self.get_logger().info('\n🏁 ¡CARRERA COMPLETADA!')
+                
+                resumen = "\nRESUMEN DE LA CARRERA:\n"
+                for idx, t in enumerate(self.lap_times):
+                    resumen += f"• Vuelta {idx+1}: {t:.3f}s\n"
+                resumen += f"🏆 Mejor Vuelta: {min(self.lap_times):.3f}s\n"
+                self.get_logger().info(resumen)
+                
                 self._publish_stop()
 
     def _telemetry_callback(self):
@@ -234,10 +245,11 @@ class F1TenthReactiveController(Node):
         now = time.monotonic()
         elapsed = now - self.lap_start_time
         self.get_logger().info(
-            f'[TEL] L: {self.lap_count+1} | T.Actual: {elapsed:.2f}s | V.Base Target: {self._target_speed():.2f} m/s'
+            f'\n[TEL] Vuelta: {self.lap_count+1} | T.Actual: {elapsed:.2f}s | V.Actual: {self.current_speed:.2f} m/s'
         )
 
     def _publish_drive(self, steering_angle: float, speed: float):
+        self.current_speed = speed
         msg                              = AckermannDriveStamped()
         msg.header.stamp                 = self.get_clock().now().to_msg()
         msg.header.frame_id              = 'base_link'
