@@ -26,9 +26,9 @@ F1TenthLearningNode
  
 ```bash
 # Compilar
-colcon build --packages-select <tu_paquete>
+colcon build
 source install/setup.bash
  
 # Ejecutar
-ros2 run <tu_paquete> f1tenth_learning_node
+ros2 run f1tenth_racer learning_node
 ```
