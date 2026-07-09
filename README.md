@@ -14,8 +14,7 @@ El controlador implementa una variante del algoritmo **Follow the Gap (FTG)**, c
 6. **Conversión a comando de control**: el índice del punto objetivo se traduce a un ángulo de giro, limitando la velocidad de cambio del ángulo entre ciclos para suavizar la conducción.
 7. **Modos de emergencia**: si la distancia frontal cae por debajo de un umbral crítico, o si no se encuentra un gap viable, el controlador activa una maniobra de escape (girando hacia el lado con más espacio libre) reduciendo la velocidad.
 8. **Velocidad dinámica**: la velocidad objetivo se ajusta en función del ángulo de giro y de la distancia libre en los conos frontal y medio del LIDAR, permitiendo acelerar en tramos despejados y frenar ante obstáculos o curvas cerradas.
-> ⚠️ Los parámetros del algoritmo (umbrales de disparidad, radio de seguridad, márgenes de gap, curvas de velocidad, etc.) todavía se encuentran en ajuste, por lo que pueden variar entre commits.
- 
+
 ## Estructura del repositorio
  
 ```
