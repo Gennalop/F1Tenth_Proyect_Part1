@@ -1,54 +1,45 @@
-import math
-import time
-import numpy as np
-
 import rclpy
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy
+import numpy as np
+import math
+import time
 
 from sensor_msgs.msg import LaserScan
 from nav_msgs.msg import Odometry
 from ackermann_msgs.msg import AckermannDriveStamped
 
-MAX_LAPS          = 10         
-BASE_SPEED        = 5.2        
-SPEED_INCREMENT   = 1.0   
-MAX_SPEED         = 12.0    
-ABSOLUTE_MAX_SPEED = 10.0
+# --- Constantes Utilizadas ---
+MAX_LAPS           = 10      
+BASE_SPEED         = 4.0        
 
-BUBBLE_RADIUS     = 0.45      
-MIN_GAP_WIDTH_DEG = 12.0 
-SCAN_FIELD_DEG    = 180.0  
+LAP_ORIGIN_RADIUS  = 2.0
 
-STEERING_GAIN     = 0.65   
-MAX_STEER_RAD     = 0.42   
-SPEED_STEER_DECAY = 0.40  
+MAX_RANGE          = 10.0
+DISPARITY_THRESH   = 0.6
+CAR_WIDHT          = 0.30
+SAFETY_MARGIN      = 0.15   
 
-LAP_ORIGIN_RADIUS = 2.0  
-LAP_COOLDOWN_S    = 3.0
+SIDE_ANGLE_DEG     = 90.0   
+THETA_DEG          = 45.0   
+LOOKAHEAD          = 1.2    
+
+KP                 = 0.30
+KD                 = 0.02
+
+STEER_MAX_RAD      = 0.4189 
+
+STRAIGHT_BOOST_SPEED     = 4.0  
+STRAIGHT_BOOST_MIN_DIST  = 7.0 
+STRAIGHT_BOOST_MAX_STEER = 0.35  
+
 
 class F1TenthReactiveController(Node):
 
     def __init__(self):
         super().__init__('f1tenth_reactive_controller')
 
-        self.lap_count        = 0
-        self.race_finished    = False
-
-        self.origin_set       = False
-        self.origin_x         = 0.0
-        self.origin_y         = 0.0
-
-        self.max_dist_from_origin = 0.0   
-        self.last_lap_time_s  = None
-        self.lap_start_time   = time.monotonic()
-        self.last_lap_trigger = -LAP_COOLDOWN_S
-
-        self.last_steering_angle = 0.0
-        self.steering_smoothing   = 0.65  
-        
-        self.lap_times        = []
-        self.current_speed    = 0.0
+        self.enable_logs = False
 
         qos_sensor = QoSProfile(
             reliability=ReliabilityPolicy.BEST_EFFORT,
@@ -56,138 +47,151 @@ class F1TenthReactiveController(Node):
             depth=1
         )
 
-        self.drive_pub = self.create_publisher(
-            AckermannDriveStamped, '/drive', 10
-        )
+        self.drive_pub = self.create_publisher(AckermannDriveStamped, '/opp_drive', 10)
+        self.scan_sub = self.create_subscription(LaserScan, '/opp_scan', self.scan_callback, qos_sensor)
+        self.odom_sub = self.create_subscription(Odometry, '/opp_racecar/odom', self.odom_callback, qos_sensor)
+        
+        self.telemetry_timer = self.create_timer(5.0, self._telemetry_callback)
 
-        self.scan_sub = self.create_subscription(
-            LaserScan, '/scan', self._scan_callback, qos_sensor
-        )
+        self.lap_count = 0
+        self.lap_start_time = None
+        self.lap_times = []
+        self.race_finished = False
 
-        self.odom_sub = self.create_subscription(
-            Odometry, '/ego_racecar/odom', self._odom_callback, qos_sensor
-        )
+        self.origin_set = False
+        self.origin_x = None
+        self.origin_y = None
+        self.max_dist_from_origin = 0.0 
 
-        self.telemetry_timer = self.create_timer(
-            5, self._telemetry_callback
-        )
+        self.prev_error = 0.0
+        self.prev_time = self.get_clock().now()
+        
+        self.current_speed = 0.0
+        self.scan_cycle = 0 
 
         self.get_logger().info(
-            '\n🏎️   F1Tenth Reactive Controller iniciado — '
-            f'{MAX_LAPS} vueltas\n'
+            '\n🏎️   F1Tenth Reactive Controller Inicializado \n'
+            f'Objetivo: {MAX_LAPS} vueltas a velocidad constante de {BASE_SPEED} m/s\n'
         )
 
     def _target_speed(self) -> float:
-        v = BASE_SPEED + self.lap_count * SPEED_INCREMENT
-        return min(v, MAX_SPEED)
-
-    def _scan_callback(self, scan: LaserScan):
+        return float(BASE_SPEED)
+    
+    def scan_callback(self, scan):
         if self.race_finished:
-            self._publish_stop()
+            self._publish_drive(0.0, 0.0)
             return
 
-        ranges = np.array(scan.ranges, dtype=np.float32)
-        n_total = len(ranges)
-
-        half_fov_rad = math.radians(SCAN_FIELD_DEG / 2.0)
-        angle_min    = scan.angle_min
-        angle_max    = scan.angle_max
-        angle_inc    = scan.angle_increment
-
-        idx_center = int(round((0.0 - angle_min) / angle_inc))
-        half_n     = int(round(half_fov_rad / angle_inc))
+        self.scan_cycle += 1
         
-        i_start    = max(0,       idx_center - half_n)
-        i_end      = min(n_total, idx_center + half_n)
+        ranges_raw = np.array(scan.ranges)
+        raw_min = np.nanmin(ranges_raw) if len(ranges_raw) > 0 else 0.0
+        raw_max = np.nanmax(ranges_raw) if len(ranges_raw) > 0 else 0.0
 
-        fov_ranges  = ranges[i_start:i_end].copy()
-        n_fov       = len(fov_ranges)
-
-        max_range = scan.range_max if (0.0 < scan.range_max < 30.0) else 10.0
-        fov_ranges = np.where(np.isnan(fov_ranges) | np.isinf(fov_ranges), max_range, fov_ranges)
-        fov_ranges = np.clip(fov_ranges, scan.range_min, max_range)
-
-        min_idx   = int(np.argmin(fov_ranges))
-        min_dist  = fov_ranges[min_idx]
-
-        if min_dist > 0.05:
-            bubble_half = int(math.ceil(BUBBLE_RADIUS / (min_dist * angle_inc)))
-        else:
-            bubble_half = n_fov // 4
-
-        b_start = max(0,     min_idx - bubble_half)
-        b_end   = min(n_fov, min_idx + bubble_half + 1)
-        fov_ranges[b_start:b_end] = 0.0
-
-        free_threshold = max(0.6, min_dist * 0.9)   
-        free_mask      = fov_ranges > free_threshold
-
-        best_start  = 0
-        best_end    = 0
-        best_width  = 0
-        cur_start   = None
-
-        for i, free in enumerate(free_mask):
-            if free and cur_start is None:
-                cur_start = i
-            if (not free or i == n_fov - 1) and cur_start is not None:
-                cur_end   = i if not free else i + 1
-                cur_width = cur_end - cur_start
-                if cur_width > best_width:
-                    best_width  = cur_width
-                    best_start  = cur_start
-                    best_end    = cur_end
-                cur_start = None
-
-        min_gap_indices = int(math.radians(MIN_GAP_WIDTH_DEG) / angle_inc)
-        if best_width < max(1, min_gap_indices):
-            self._publish_drive(0.0, 0.8)
-            return
-
-        gap_ranges = fov_ranges[best_start:best_end]
+        ranges = np.nan_to_num(ranges_raw, nan=MAX_RANGE, posinf=MAX_RANGE, neginf=0.0)
+        ranges = np.clip(ranges, 0.0, MAX_RANGE)
         
-        center_idx = (best_start + best_end) // 2
-        farthest_rel_idx = int(np.argmax(gap_ranges))
-        farthest_idx = best_start + farthest_rel_idx
-        
-        target_idx = int(0.70 * center_idx + 0.30 * farthest_idx)
+        ranges_clean = self._clean_disparities(ranges, scan.angle_increment)
 
-        global_idx = i_start + target_idx
-        target_angle_rad = angle_min + (global_idx * angle_inc)
+        side_angle = math.radians(SIDE_ANGLE_DEG)
+        theta = math.radians(THETA_DEG)
+        left_proj = self._get_wall_projection(ranges_clean, scan.angle_min, scan.angle_increment, 'left', side_angle, theta)
+        right_proj = self._get_wall_projection(ranges_clean, scan.angle_min, scan.angle_increment, 'right', side_angle, theta)
 
-        if abs(target_angle_rad) < math.radians(2.5):
-            target_steering = 0.0
-        else:
-            if abs(target_angle_rad) < math.radians(6.0):
-                current_gain = STEERING_GAIN * 0.4
+        CRITICAL_WALL_DIST = 0.45 
+
+        if left_proj is not None and right_proj is not None:
+            if right_proj < CRITICAL_WALL_DIST:
+                error = CAR_WIDHT * 2.5  
+                case_desc = "EVASIÓN CRÍTICA: Muro derecho demasiado cerca"
+            elif left_proj < CRITICAL_WALL_DIST:
+                error = -CAR_WIDHT * 2.5 
+                case_desc = "EVASIÓN CRÍTICA: Muro izquierdo demasiado cerca"
             else:
-                current_gain = STEERING_GAIN * 1.0
-            
-            target_steering = current_gain * target_angle_rad
-
-        steering = float(self.steering_smoothing * self.last_steering_angle + 
-                         (1.0 - self.steering_smoothing) * target_steering)
-        
-        steering = float(np.clip(steering, -MAX_STEER_RAD, MAX_STEER_RAD))
-        self.last_steering_angle = steering  
-
-        v_base = self._target_speed()
-        look_ahead_dist = float(np.mean(gap_ranges))
-        
-        if look_ahead_dist > 7.0 and abs(steering) < 0.08:
-            velocity = v_base + 1.5 
+                error = left_proj - right_proj
+                case_desc = "Ambas paredes visibles (Centrado normal)"
+        elif left_proj is not None:
+            error = -CAR_WIDHT * 1.5  
+            case_desc = "Solo pared IZQUIERDA visible"
+        elif right_proj is not None:
+            error = CAR_WIDHT * 1.5   
+            case_desc = "Solo pared DERECHA visible"
         else:
-            steer_ratio = abs(steering) / MAX_STEER_RAD
-            distance_factor = np.clip(look_ahead_dist / 6.0, 0.35, 1.0) 
-            velocity = float(v_base * (1.0 - SPEED_STEER_DECAY * steer_ratio) * distance_factor)
-        
-        velocity = min(velocity, ABSOLUTE_MAX_SPEED)
-        velocity = max(1.2, velocity)
-        self._publish_drive(steering, velocity)
+            error = self.prev_error
+            case_desc = "Ceguera total: Usando error previo"
 
-    def _odom_callback(self, odom: Odometry):
-        px = odom.pose.pose.position.x
-        py = odom.pose.pose.position.y
+        error = np.clip(error, -1.0, 1.0)
+
+        now_time = self.get_clock().now()
+        dt = (now_time - self.prev_time).nanoseconds / 1e9
+        if dt <= 0.0: dt = 1e-3
+        self.prev_time = now_time
+
+        derivative = (error - self.prev_error) / dt
+        derivative = np.clip(derivative, -5.0, 5.0)
+        self.prev_error = error
+
+        num_rays = len(ranges_clean)
+        fov_indices = int((math.radians(15.0) / scan.angle_increment))
+        center_idx = num_rays // 2
+        start_idx = max(0, center_idx - fov_indices)
+        end_idx = min(num_rays, center_idx + fov_indices)
+        front_dist_critica = float(np.min(ranges_clean[start_idx:end_idx]))
+
+        current_target_speed = self._target_speed()
+        speed_scale = BASE_SPEED / max(current_target_speed, 1e-3)
+        
+        steering_angle_raw = (KP * error + KD * derivative) * speed_scale
+        if front_dist_critica > 3.0:
+            max_giro_seguro = STEER_MAX_RAD * 0.5  # Reduce el límite dinámicamente
+            steering_angle = np.clip(steering_angle_raw, -max_giro_seguro, max_giro_seguro)
+        else:
+            steering_angle = np.clip(steering_angle_raw, -STEER_MAX_RAD, STEER_MAX_RAD)
+        
+        boost_fov_indices = int((math.radians(3.0) / scan.angle_increment))
+        b_start = max(0, center_idx - boost_fov_indices)
+        b_end = min(num_rays, center_idx + boost_fov_indices)
+        dist_para_boost = float(np.mean(ranges_clean[b_start:b_end]))
+
+        v_max = self._target_speed()
+        v_min = 1.5  
+
+        steer_ratio = abs(steering_angle) / STEER_MAX_RAD
+        speed_cmd = v_max - (v_max - v_min) * (steer_ratio ** 2)
+
+        if front_dist_critica < 1.0:
+            speed_cmd = 0.5  
+            speed_reason = "FRENO DE EMERGENCIA: Obstáculo inminente en cono frontal"
+        elif front_dist_critica < 2.5:
+            speed_cmd = min(speed_cmd, 4.5)
+            speed_reason = "Frenado preventivo por curva cercana"
+        else:
+            speed_reason = "Velocidad de carrera"
+            if dist_para_boost > STRAIGHT_BOOST_MIN_DIST and front_dist_critica >= 5.0 and steer_ratio < STRAIGHT_BOOST_MAX_STEER:
+                speed_cmd = STRAIGHT_BOOST_SPEED
+                speed_reason = "BOOST: Recta despejada"
+                self.get_logger().info(
+                    f'\nBOOST\n'
+                )
+
+        speed_cmd = max(0.5, min(STRAIGHT_BOOST_SPEED, speed_cmd))
+
+        if self.enable_logs and (self.scan_cycle % 20 == 0):
+            self.get_logger().info(
+                f"\n=== [SCAN CICLO #{self.scan_cycle}] ====================\n"
+                f" 1. LiDAR Inicial: Min={raw_min:.2f}m, Max={raw_max:.2f}m"
+                f" 2. Proyecciones (Lookahead {LOOKAHEAD}m): Izq={f'{left_proj:.2f}m' if left_proj else 'None'} | Der={f'{right_proj:.2f}m' if right_proj else 'None'}\n"
+                f" 3. Estrategia: {case_desc} -> Error Calculado = {error:.3f}\n"
+                f" 4. Control PD: dt={dt:.4f}s | Derivativa={derivative:.3f} | Volante crudo={math.degrees(np.clip(steering_angle_raw, -STEER_MAX_RAD, STEER_MAX_RAD)):.1f}° | Volante filtrado={math.degrees(steering_angle):.1f}°\n"
+                f" 5. Motor: Frente={front_dist_critica:.2f}m | Target={speed_cmd:.2f} m/s ({speed_reason})\n"
+                f"======================================================="
+            )
+
+        self._publish_drive(steering_angle, speed_cmd)
+
+    def odom_callback(self, msg):
+        px = msg.pose.pose.position.x
+        py = msg.pose.pose.position.y
 
         if not self.origin_set:
             self.origin_x  = px
@@ -202,51 +206,36 @@ class F1TenthReactiveController(Node):
         if self.race_finished:
             return
 
-        dist = math.hypot(px - self.origin_x, py - self.origin_y)
-
-        if dist > self.max_dist_from_origin:
-            self.max_dist_from_origin = dist
+        dist_to_origin = math.hypot(px - self.origin_x, py - self.origin_y)
+        if dist_to_origin > self.max_dist_from_origin:
+            self.max_dist_from_origin = dist_to_origin
 
         now = time.monotonic()
 
         if (self.max_dist_from_origin > 8.0 
-                and dist < LAP_ORIGIN_RADIUS  
-                and (now - self.last_lap_trigger) > LAP_COOLDOWN_S):
+            and dist_to_origin < LAP_ORIGIN_RADIUS):
 
-            lap_time = now - self.lap_start_time
-            self.last_lap_time_s  = lap_time
-            self.lap_times.append(lap_time)
-            self.lap_count       += 1
-            self.last_lap_trigger = now
-            self.lap_start_time   = now
-            self.max_dist_from_origin = 0.0   
+            lap_duration = now - self.lap_start_time
+            self.lap_times.append(lap_duration)
+            self.lap_count += 1
+            self.lap_start_time = now
+            self.max_dist_from_origin = 0.0  
 
             self.get_logger().info(
                 f'\n\n🏁  ¡VUELTA {self.lap_count}/{MAX_LAPS} completada!'
-                f'\nTiempo de Vuelta: {lap_time:.3f}s'
-                f'\nSiguiente Velocidad Base: {self._target_speed():.2f} m/s\n'
+                f'\nTiempo de Vuelta: {lap_duration:.3f}s'
             )
 
             if self.lap_count >= MAX_LAPS:
                 self.race_finished = True
                 self.get_logger().info('\n🏁 ¡CARRERA COMPLETADA!')
-                
                 resumen = "\nRESUMEN DE LA CARRERA:\n"
                 for idx, t in enumerate(self.lap_times):
                     resumen += f"• Vuelta {idx+1}: {t:.3f}s\n"
                 resumen += f"🏆 Mejor Vuelta: {min(self.lap_times):.3f}s\n"
                 self.get_logger().info(resumen)
                 
-                self._publish_stop()
-
-    def _telemetry_callback(self):
-        if self.race_finished:
-            return
-        now = time.monotonic()
-        elapsed = now - self.lap_start_time
-        self.get_logger().info(
-            f'\n[TEL] Vuelta: {self.lap_count+1} | T.Actual: {elapsed:.2f}s | V.Actual: {self.current_speed:.2f} m/s'
-        )
+                self._publish_drive(0.0, 0.0)
 
     def _publish_drive(self, steering_angle: float, speed: float):
         self.current_speed = speed
@@ -257,15 +246,61 @@ class F1TenthReactiveController(Node):
         msg.drive.speed                  = speed
         self.drive_pub.publish(msg)
 
-    def _publish_stop(self):
-        self._publish_drive(0.0, 0.0)
+    def _telemetry_callback(self):
+        if self.race_finished or self.lap_start_time is None:
+            return
+        now = time.monotonic()
+        elapsed = now - self.lap_start_time
+        self.get_logger().info(
+            f'\n[TEL] Lap: {self.lap_count+1} | T.Actual: {elapsed:.2f}s | V.Actual: {self.current_speed:.2f} m/s'
+        )
+
+    def _get_wall_projection(self, ranges, angle_min, angle_increment, side, side_angle, theta):
+        if side == 'right': angle_b, angle_c = -side_angle, -(side_angle - theta)
+        else: angle_b, angle_c = side_angle, (side_angle - theta)
+        idx_b = int(round((angle_b - angle_min) / angle_increment))
+        idx_c = int(round((angle_c - angle_min) / angle_increment))
+        if not (0 <= idx_b < len(ranges) and 0 <= idx_c < len(ranges)):
+            return None
+        dist_b = float(ranges[idx_b])
+        dist_c = float(ranges[idx_c])
+        if dist_b >= MAX_RANGE * 0.95 or dist_c >= MAX_RANGE * 0.95:
+            return None
+        alpha = math.atan2(dist_c * math.cos(theta) - dist_b, dist_c * math.sin(theta))
+        current_distance = dist_b * math.cos(alpha)
+        projected_distance = current_distance + LOOKAHEAD * math.sin(alpha)
+        return projected_distance
+    
+    def _clean_disparities(self, ranges, angle_increment):
+        out = ranges.copy()
+        car_radius = (CAR_WIDHT / 2.0) + SAFETY_MARGIN
+
+        for i in range(len(out) - 1):
+            diff = out[i + 1] - out[i]
+            if abs(diff) > DISPARITY_THRESH:
+                near_idx = i if diff > 0 else i + 1
+                near_dist = max(out[near_idx], 0.1)
+                alpha_inflado = math.atan2(car_radius, near_dist)
+                indices_a_cambiar = int(math.ceil(alpha_inflado / angle_increment))
+                direction = 1 if diff > 0 else -1
+                for j in range(1, indices_a_cambiar + 1):
+                    target_idx = near_idx + (direction * j)
+                    if 0 <= target_idx < len(out):
+                        if out[target_idx] > out[near_idx]:
+                            out[target_idx] = out[near_idx]
+        return out
+
 
 def main(args=None):
     rclpy.init(args=args)
     node = F1TenthReactiveController()
-    rclpy.spin(node)
-    node.destroy_node()
-    rclpy.shutdown()
+    try:
+        rclpy.spin(node)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        node.destroy_node()
+        rclpy.shutdown()
 
 if __name__ == '__main__':
     main()
