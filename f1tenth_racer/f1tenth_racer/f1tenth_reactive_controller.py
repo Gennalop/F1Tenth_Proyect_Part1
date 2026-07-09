@@ -11,7 +11,7 @@ from ackermann_msgs.msg import AckermannDriveStamped
 
 # --- Constantes Utilizadas ---
 MAX_LAPS           = 10      
-BASE_SPEED         = 4.0        
+BASE_SPEED         = 2.5        
 
 LAP_ORIGIN_RADIUS  = 2.0
 
@@ -29,7 +29,7 @@ KD                 = 0.02
 
 STEER_MAX_RAD      = 0.4189 
 
-STRAIGHT_BOOST_SPEED     = 4.0  
+STRAIGHT_BOOST_SPEED     = 2.5  
 STRAIGHT_BOOST_MIN_DIST  = 7.0 
 STRAIGHT_BOOST_MAX_STEER = 0.35  
 
@@ -170,9 +170,9 @@ class F1TenthReactiveController(Node):
             if dist_para_boost > STRAIGHT_BOOST_MIN_DIST and front_dist_critica >= 5.0 and steer_ratio < STRAIGHT_BOOST_MAX_STEER:
                 speed_cmd = STRAIGHT_BOOST_SPEED
                 speed_reason = "BOOST: Recta despejada"
-                self.get_logger().info(
-                    f'\nBOOST\n'
-                )
+                #self.get_logger().info(
+                #    f'\nBOOST\n'
+                #)
 
         speed_cmd = max(0.5, min(STRAIGHT_BOOST_SPEED, speed_cmd))
 
@@ -304,3 +304,4 @@ def main(args=None):
 
 if __name__ == '__main__':
     main()
+
