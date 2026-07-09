@@ -34,9 +34,9 @@ En esta parte se incorporaron obstáculos estáticos en el mapa, además de un s
 
 El simulador F1TENTH necesita que le indiques qué mapa usar. Debes reemplazar el mapa por defecto (`levine`) por el correspondiente a cada rama, el cual se encuentra en la carpeta `map/` de dicha rama.
 
-1. **Copia los archivos del mapa** (`.png` y `.yaml`) desde la carpeta `map/` de la rama correspondiente hacia la carpeta de mapas del simulador.
+1. **Copia los archivos del mapa** (`.png` y `.yaml`) desde la carpeta `map/` de la rama correspondiente hacia la carpeta de mapas del simulador F1TENTH `~/F1Tenth-Repository/src/f1tenth_gym_ros/maps`
 
-2. **Actualiza la ruta del mapa** en el archivo de configuración del simulador:
+3. **Actualiza la ruta del mapa** en el archivo de configuración del simulador:
    ```
    ~/F1Tenth-Repository/src/f1tenth_gym_ros/config/sim.yaml
    ```
@@ -45,7 +45,7 @@ El simulador F1TENTH necesita que le indiques qué mapa usar. Debes reemplazar e
    map_path: '/home/<tu_usuario>/F1Tenth-Repository/src/f1tenth_gym_ros/maps/<nombre_del_mapa>'
    ```
 
-3. **Recompila el simulador** para que tome los cambios:
+4. **Recompila el simulador** para que tome los cambios:
    ```bash
    cd ~/F1Tenth-Repository
    colcon build
