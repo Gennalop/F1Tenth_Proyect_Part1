@@ -57,17 +57,12 @@ El controlador implementa una variante del algoritmo **Follow the Gap (FTG)**, c
  
 El simulador debe usar el mapa con obstáculos incluido en esta rama en lugar del mapa por defecto (`levine`):
  
-1. **Copia los archivos del mapa** (`BrandsHatch_map_obs.png` y `BrandsHatch_map_obs.yaml`) desde la carpeta `Map/` de esta rama hacia la carpeta de mapas del simulador:
-```bash
-   cp ~/f1tenth_ws/src/f1tenth_racer/Map/BrandsHatch_map_obs.* \
-      ~/F1Tenth-Repository/src/f1tenth_gym_ros/maps/
-```
+1. **Copia los archivos del mapa** (`BrandsHatch_map_obs.png` y `BrandsHatch_map_obs.yaml`) desde la carpeta `Map/` de esta rama hacia la carpeta de mapas del simulador `~/F1Tenth-Repository/src/f1tenth_gym_ros/maps`.
  
 2. **Edita el archivo de configuración del simulador**:
 ```
    ~/F1Tenth-Repository/src/f1tenth_gym_ros/config/sim.yaml
 ```
- 
    Y actualiza los siguientes parámetros para apuntar al nuevo mapa y habilitar un segundo agente (el vehículo obstáculo):
  
 ```yaml
@@ -97,13 +92,7 @@ El simulador debe usar el mapa con obstáculos incluido en esta rama en lugar de
    colcon build
    source install/setup.bash
 ```
-3. **Recompila el simulador** para que tome los cambios:
-```bash
-   cd ~/F1Tenth-Repository
-   colcon build
-   source install/setup.bash
-```
- 
+
 ## Ejecución
  
 1. **Levanta el simulador** en una primera terminal:
