@@ -26,7 +26,6 @@ setup(
     },
     entry_points={
         'console_scripts': [
-            'reactive_controller = f1tenth_racer.f1tenth_reactive_controller:main',
             'learning_node = f1tenth_racer.f1tenth_learning_node:main',
         ],
     },
