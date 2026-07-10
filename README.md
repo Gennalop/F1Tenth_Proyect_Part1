@@ -99,3 +99,9 @@ ros2 run f1tenth_racer learning_node
 | `/scan` | `LaserScan` | Entrada — LiDAR |
 | `/ego_racecar/odom` | `Odometry` | Entrada — Posición |
 | `/drive` | `AckermannDriveStamped` | Salida — Velocidad y dirección |
+
+## Videos
+
+En la carpeta `Videos/` se incluyen grabaciones de pruebas del controlador en el simulador, útiles como referencia del comportamiento esperado o puedes acceder por medio del siguiente enlace:
+
+- Simulación de LearningController: https://youtu.be/hlk6b5DTihs
