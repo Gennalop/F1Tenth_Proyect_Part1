@@ -54,7 +54,7 @@ El controlador se basa en un esquema reactivo de **seguimiento de paredes (wall 
 
    ```bash
    cd ~/f1tenth_ws
-   colcon build f1tenth_racer
+   colcon build
    source install/setup.bash
    ```
 
@@ -118,4 +118,4 @@ Al igual que en las demás ramas, el simulador debe usar el mapa correspondiente
 
 En la carpeta `Videos/` se incluyen grabaciones de pruebas del controlador en el simulador, útiles como referencia del comportamiento esperado o puedes acceder por medio del siguiente enlace:
 
-- Simulación de ReactiveController: https://youtu.be/BvCblsCIRD0
+- Simulación de ReactiveController: https://youtu.be/BvCblsCIRD0 (Mejor tiempo - Vuelta10 = 69.698)
