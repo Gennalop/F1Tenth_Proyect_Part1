@@ -103,4 +103,4 @@ ros2 run f1tenth_racer learning_node
 
 En la carpeta `Videos/` se incluyen grabaciones de pruebas del controlador en el simulador, útiles como referencia del comportamiento esperado o puedes acceder por medio del siguiente enlace:
 
-- Simulación de LearningController: https://youtu.be/hlk6b5DTihs
+- Simulación de LearningController: https://youtu.be/hlk6b5DTihs (Mejor tiempo - Vuelta7 = 47.042)
