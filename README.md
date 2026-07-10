@@ -116,4 +116,6 @@ Al igual que en las demás ramas, el simulador debe usar el mapa correspondiente
 
 ## Videos
 
-En la carpeta `Videos/` se incluyen grabaciones de pruebas del controlador en el simulador, útiles como referencia del comportamiento esperado.
+En la carpeta `Videos/` se incluyen grabaciones de pruebas del controlador en el simulador, útiles como referencia del comportamiento esperado o puedes acceder por medio del siguiente enlace:
+
+- Simulación de ReactiveController: https://youtu.be/BvCblsCIRD0
