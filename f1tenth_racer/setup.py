@@ -27,7 +27,6 @@ setup(
     entry_points={
         'console_scripts': [
             'reactive_controller = f1tenth_racer.f1tenth_reactive_controller:main',
-            'reactive_obs = f1tenth_racer.f1tenth_reactive_obs:main',
         ],
     },
 )

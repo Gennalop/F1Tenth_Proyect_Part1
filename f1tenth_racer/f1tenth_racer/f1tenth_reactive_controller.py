@@ -9,9 +9,8 @@ from sensor_msgs.msg import LaserScan
 from nav_msgs.msg import Odometry
 from ackermann_msgs.msg import AckermannDriveStamped
 
-# --- Constantes Utilizadas ---
 MAX_LAPS           = 10      
-BASE_SPEED         = 4.0        
+BASE_SPEED         = 9.0        
 
 LAP_ORIGIN_RADIUS  = 2.0
 
@@ -29,7 +28,7 @@ KD                 = 0.02
 
 STEER_MAX_RAD      = 0.4189 
 
-STRAIGHT_BOOST_SPEED     = 4.0  
+STRAIGHT_BOOST_SPEED     = 14.0  
 STRAIGHT_BOOST_MIN_DIST  = 7.0 
 STRAIGHT_BOOST_MAX_STEER = 0.35  
 
@@ -47,9 +46,9 @@ class F1TenthReactiveController(Node):
             depth=1
         )
 
-        self.drive_pub = self.create_publisher(AckermannDriveStamped, '/opp_drive', 10)
-        self.scan_sub = self.create_subscription(LaserScan, '/opp_scan', self.scan_callback, qos_sensor)
-        self.odom_sub = self.create_subscription(Odometry, '/opp_racecar/odom', self.odom_callback, qos_sensor)
+        self.drive_pub = self.create_publisher(AckermannDriveStamped, '/drive', 10)
+        self.scan_sub = self.create_subscription(LaserScan, '/scan', self.scan_callback, qos_sensor)
+        self.odom_sub = self.create_subscription(Odometry, '/ego_racecar/odom', self.odom_callback, qos_sensor)
         
         self.telemetry_timer = self.create_timer(5.0, self._telemetry_callback)
 
@@ -98,7 +97,7 @@ class F1TenthReactiveController(Node):
         left_proj = self._get_wall_projection(ranges_clean, scan.angle_min, scan.angle_increment, 'left', side_angle, theta)
         right_proj = self._get_wall_projection(ranges_clean, scan.angle_min, scan.angle_increment, 'right', side_angle, theta)
 
-        CRITICAL_WALL_DIST = 0.45 
+        CRITICAL_WALL_DIST = 0.65 
 
         if left_proj is not None and right_proj is not None:
             if right_proj < CRITICAL_WALL_DIST:
@@ -143,7 +142,7 @@ class F1TenthReactiveController(Node):
         
         steering_angle_raw = (KP * error + KD * derivative) * speed_scale
         if front_dist_critica > 3.0:
-            max_giro_seguro = STEER_MAX_RAD * 0.5  # Reduce el límite dinámicamente
+            max_giro_seguro = STEER_MAX_RAD * 0.8
             steering_angle = np.clip(steering_angle_raw, -max_giro_seguro, max_giro_seguro)
         else:
             steering_angle = np.clip(steering_angle_raw, -STEER_MAX_RAD, STEER_MAX_RAD)
@@ -159,10 +158,10 @@ class F1TenthReactiveController(Node):
         steer_ratio = abs(steering_angle) / STEER_MAX_RAD
         speed_cmd = v_max - (v_max - v_min) * (steer_ratio ** 2)
 
-        if front_dist_critica < 1.0:
+        if front_dist_critica < 1.8:
             speed_cmd = 0.5  
             speed_reason = "FRENO DE EMERGENCIA: Obstáculo inminente en cono frontal"
-        elif front_dist_critica < 2.5:
+        elif front_dist_critica < 4.5:
             speed_cmd = min(speed_cmd, 4.5)
             speed_reason = "Frenado preventivo por curva cercana"
         else:
@@ -170,9 +169,9 @@ class F1TenthReactiveController(Node):
             if dist_para_boost > STRAIGHT_BOOST_MIN_DIST and front_dist_critica >= 5.0 and steer_ratio < STRAIGHT_BOOST_MAX_STEER:
                 speed_cmd = STRAIGHT_BOOST_SPEED
                 speed_reason = "BOOST: Recta despejada"
-                self.get_logger().info(
-                    f'\nBOOST\n'
-                )
+                #self.get_logger().info(
+                #    f'\nBOOST\n'
+                #)
 
         speed_cmd = max(0.5, min(STRAIGHT_BOOST_SPEED, speed_cmd))
 
