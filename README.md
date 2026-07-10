@@ -120,5 +120,6 @@ Con esto, en el simulador deberían aparecer ambos vehículos: el ego navegando 
  
 ## Videos
  
-En la carpeta `Videos/` se incluyen grabaciones de pruebas del controlador en el simulador, útiles como referencia del comportamiento esperado.
+En la carpeta `Videos/` se incluyen grabaciones de pruebas del controlador en el simulador, útiles como referencia del comportamiento esperado. También puedes acceder siguiendo el enlace a continuación:
+- Simulación ReactiveFollowGap: https://youtu.be/qeA9m8qlLKE
 
