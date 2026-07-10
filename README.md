@@ -50,7 +50,7 @@ El controlador implementa una variante del algoritmo **Follow the Gap (FTG)**, c
 2. **Compila el paquete**:
 ```bash
    cd ~/f1tenth_ws
-   colcon build f1tenth_racer
+   colcon build
    source install/setup.bash
 ```
 ## Configuración del mapa
@@ -121,5 +121,5 @@ Con esto, en el simulador deberían aparecer ambos vehículos: el ego navegando 
 ## Videos
  
 En la carpeta `Videos/` se incluyen grabaciones de pruebas del controlador en el simulador, útiles como referencia del comportamiento esperado. También puedes acceder siguiendo el enlace a continuación:
-- Simulación ReactiveFollowGap: https://youtu.be/qeA9m8qlLKE
+- Simulación ReactiveFollowGap: https://youtu.be/qeA9m8qlLKE (Mejor tiempo - Vuelta2 = 189.099)
 
