@@ -20,7 +20,6 @@ f1tenth_racer/                        # Carpeta raíz del repositorio (paquete R
 ├── f1tenth_racer/                    # Paquete Python interno
 │   ├── __init__.py
 │   ├── f1tenth_learning_node.py	# Lógica
-│   └── f1tenth_reactive_controller.py   
 ├── resource/
 ├── test/
 ├── package.xml
